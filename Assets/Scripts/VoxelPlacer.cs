@@ -25,6 +25,7 @@ namespace UnityTemplateProjects
 {
     public class VoxelPlacer : MonoBehaviour
     {
+        public bool quickPlace = false;
         [Range(5, 12)]
         public int initialDepth = 5;
         public GameObject octreeObj;
@@ -53,13 +54,19 @@ namespace UnityTemplateProjects
 
         private void Update()
         {
-            if (Input.GetKeyDown(KeyCode.E))
+            if (Input.GetKeyDown(KeyCode.T))
             {
                 _octree.Rebuild();
                 octreeObj.GetComponent<Renderer>().material.mainTexture = _octree.Apply();
             }
+
+            if (Input.GetKeyDown(KeyCode.G))
+                quickPlace = !quickPlace;
             
-            depth += Input.mouseScrollDelta.x;
+            if (Input.GetKeyDown(KeyCode.Q))
+                depth++;
+            if (Input.GetKeyDown(KeyCode.E))
+                depth--;
             depth = Mathf.Clamp(depth, 0, 21);
 
             var depthInt = Mathf.RoundToInt(depth);
@@ -75,13 +82,13 @@ namespace UnityTemplateProjects
                 selectionCube.transform.localScale = Vector3.one * (size * 256f);
                 lastHit = hit;
 
-                if (Input.GetMouseButton(0))
+                if (quickPlace ? Input.GetMouseButton(0) : Input.GetMouseButtonDown(0))
                 {
                     _octree.SetVoxel(hit.objPos + hit.faceNormal * 4.76837158203125e-7f, depthInt, Color.white, new int[0]);
                     octreeObj.GetComponent<Renderer>().material.mainTexture = _octree.Apply();
                 }
 
-                if (Input.GetMouseButton(2))
+                if (quickPlace ? Input.GetMouseButton(2) : Input.GetMouseButtonDown(2))
                 {
                     _octree.SetVoxel(hit.objPos - hit.faceNormal * 4.76837158203125e-7f, depthInt, Color.clear, new int[0]);
                     octreeObj.GetComponent<Renderer>().material.mainTexture = _octree.Apply();

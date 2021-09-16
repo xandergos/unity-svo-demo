@@ -25,8 +25,6 @@ namespace SVO
 {
     public class OctreeRendererFeature : ScriptableRendererFeature
     {
-        internal static List<Renderer> octreeRenderers = new List<Renderer>();
-        
         private class OctreeRenderPass : ScriptableRenderPass
         {
             /// <summary>
@@ -39,10 +37,19 @@ namespace SVO
             /// </summary>
             public override void Execute(ScriptableRenderContext context, ref RenderingData renderingData)
             {
-                CommandBuffer cmd = CommandBufferPool.Get();
-
-                foreach (var octree in OctreeRendererFeature.octreeRenderers)
+                var cmd = CommandBufferPool.Get();
+                var volumeId = Shader.PropertyToID("OctreeVolume");
+                
+                foreach (var renderer in FindObjectsOfType<Renderer>())
                 {
+                    if (renderer.shadowCastingMode == ShadowCastingMode.Off)
+                        continue;
+
+                    foreach (var material in renderer.materials)
+                    {
+                        var v = material.GetTexture(volumeId) as Texture3D;
+                        if (v == null) continue;
+                    }
                 }
 
                 // execution
@@ -57,7 +64,7 @@ namespace SVO
         }
 
         private OctreeRenderPass _renderPass;
-        
+
         public override void Create()
         {
             _renderPass = new OctreeRenderPass

@@ -16,12 +16,12 @@
  *  along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-Shader "Octree/OctreeSimple"
+Shader "Octree/OctreeBase"
 {
     Properties
     {
         _Shininess ("Shininess", Range(0, 1))=1
-        [MainTexture] [NoScaleOffset] _Volume ("Volume", 3D) = "" {}
+        [MainTexture] [NoScaleOffset] _Volume ("OctreeVolume", 3D) = "" {}
     }
     SubShader
     {
@@ -31,7 +31,9 @@ Shader "Octree/OctreeSimple"
 
         Pass
         {
-            Tags { "RenderType"="AlphaTest" }
+            Tags { 
+                "RenderType"="AlphaTest"
+            }
             
             ZWrite On
 
@@ -43,6 +45,8 @@ Shader "Octree/OctreeSimple"
 
             #pragma vertex vert
             #pragma fragment frag
+
+            uniform Texture2D<float3> hit_pos;
             
             float _Shininess;
             Texture3D<int> _Volume;
@@ -102,7 +106,6 @@ Shader "Octree/OctreeSimple"
                 //float real_depth = SAMPLE_DEPTH_TEXTURE(_CameraDepthTexture, frag_pos);
                 //real_depth = Linear01Depth(real_depth) * (_ProjectionParams.z - _ProjectionParams.y) + _ProjectionParams.y;
 
-
                 ray ray;
                 ray.dir = i.ray_direction;
                 ray.origin = i.ray_origin;
@@ -119,6 +122,7 @@ Shader "Octree/OctreeSimple"
                 if(cast_ray(ray, _Volume, color, voxel_obj_pos, voxel_size,
                     hit_obj_pos, attributes_ptr, face_normal, loops))
                 {
+                    // BEGIN LIGHTING CODE
                     const float3 hit_world_pos = mul(unity_ObjectToWorld, hit_obj_pos);
                     float3 normal = face_normal;
                     normal = UnityObjectToWorldNormal(normal);
@@ -131,7 +135,8 @@ Shader "Octree/OctreeSimple"
                     o.color = color * light0_strength;
                     o.color.rgb += ShadeSH3Order(half4(normal, 1));
                     o.color.rgb += spec;
-
+                    // END LIGHTING CODE
+                    
                     const float4 clip_pos = UnityWorldToClipPos(hit_world_pos);
                     o.depth = clip_pos.z / clip_pos.w;
                     #if defined(SHADER_API_GLCORE) || defined(SHADER_API_OPENGL) || \
@@ -147,6 +152,86 @@ Shader "Octree/OctreeSimple"
 
             
             ENDHLSL
+        }
+        
+        Pass 
+        {
+            Tags {
+                "LightMode" = "ShadowCaster"
+            }
+            CGPROGRAM
+
+            #include "AutoLight.cginc"
+            #include "UnityCG.cginc"
+            #include "GeometryRayCast.hlsl"
+
+            float _Shininess;
+            Texture3D<int> _Volume;
+            sampler2D _CameraDepthTexture;
+
+            struct appdata 
+            {
+                float4 vertex : POSITION;
+                float3 normal : NORMAL;
+                float2 uv     : TEXCOORD0;
+            };
+
+            struct v2f
+            {
+                V2F_SHADOW_CASTER;
+                float3 world_pos : TEXCOORD0;
+                float4 screen_pos : TEXCOORD1;
+	            float3 ray_origin : TEXCOORD2;
+	            float3 ray_direction : TEXCOORD3;
+            };
+
+            v2f Vert(appdata v)
+            {
+                v2f o;
+                o.world_pos = mul(unity_ObjectToWorld, v.vertex).xyz;
+                
+                o.pos = UnityObjectToClipPos(v.vertex);
+                #ifdef DISABLE_VIEW_CULLING
+                o.pos.z = 1;
+                #endif
+                
+                o.screen_pos = ComputeScreenPos(o.pos);
+                if(UNITY_MATRIX_P[3][3] == 1.f)
+                {
+                    const float3 cam_dir = unity_CameraToWorld._m02_m12_m22;
+                    const float3 obj_scale = unity_ObjectToWorld._m00_m11_m22;
+                    o.ray_direction = mul(unity_WorldToObject, float4(cam_dir, 0));
+                    o.ray_origin = v.vertex - o.ray_direction * 2 * max(obj_scale);
+                }
+                else
+                {
+	                o.ray_origin = mul(unity_WorldToObject, _WorldSpaceCameraPos);
+	                o.ray_direction = v.vertex - o.ray_origin;
+                }
+                
+                return o;
+            }
+
+            float4 Frag(v2f i) : SV_Target
+            {
+                ray r;
+                r.dir = i.ray_direction;
+                r.origin = i.ray_origin;
+                
+                float4 color;
+                float3 voxel_obj_pos;
+                float voxel_size;
+                float3 hit_obj_pos;
+                int attributes_ptr;
+                float3 face_normal;
+                int loops;
+                if(cast_ray(r, _Volume, color, voxel_obj_pos, voxel_size,
+                    hit_obj_pos, attributes_ptr, face_normal, loops))
+                    discard;
+                SHADOW_CASTER_FRAGMENT(i);
+            }
+
+            ENDCG
         }
     }
 }
